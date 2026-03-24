@@ -1,5 +1,5 @@
 import streamlit as st
-import together
+from together import Together
 import os
 from dotenv import load_dotenv
 import pandas as pd
@@ -18,15 +18,14 @@ from typing import Dict, Any, List, Optional
 # Load environment variables
 load_dotenv()
 
-# Get API key from environment or secrets
-api_key = os.getenv('TOGETHER_API_KEY', st.secrets.get("TOGETHER_API_KEY", ""))
+# Get API key from environment or Streamlit secrets
+api_key = os.getenv('TOGETHER_API_KEY') or st.secrets.get("TOGETHER_API_KEY", "")
 
 if not api_key:
-    st.error("Together API key not found. Please set it in your environment variables or Streamlit secrets.")
+    st.error("Together API key not found. Please set TOGETHER_API_KEY in your .env file or Streamlit secrets.")
     st.stop()
 
-# Set the API key as an environment variable
-os.environ['TOGETHER_API_KEY'] = api_key
+together_client = Together(api_key=api_key)
 
 # Initialize session state variables
 if "messages" not in st.session_state:
@@ -398,22 +397,16 @@ def main():
                         st.session_state.messages
                     )
 
-                    # Get response from the model
-                    response = together.Complete.create(
+                    # Get response from the model (Together SDK v1.x)
+                    response = together_client.completions.create(
                         prompt=prompt,
                         model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
                         max_tokens=1024,
                         temperature=0.7,
                     )
-                    
-                    # Extract the response text
-                    if isinstance(response, dict) and 'output' in response:
-                        bot_response = response['output']['text'].strip()
-                    elif isinstance(response, dict) and 'choices' in response:
-                        bot_response = response['choices'][0]['text'].strip()
-                    else:
-                        bot_response = str(response).strip()
-                    
+
+                    bot_response = response.choices[0].text.strip()
+
                     # Remove any "Assistant:" prefix if present
                     bot_response = bot_response.replace("Assistant:", "").strip()
                     
