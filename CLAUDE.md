@@ -19,7 +19,7 @@ A Miami-Dade County ZIP-code explorer and neighborhood intelligence tool.
 ## Stack
 - **Framework:** Streamlit
 - **Language:** Python 3.11+ — strict typing with `mypy`. No bare `dict`, no `Any`. Ever.
-- **AI Model:** Llama 3.3-70B-Instruct-Turbo-Free via Together.ai SDK 1.x
+- **AI Model:** ServiceNow-AI/Apriel-1.6-15b-Thinker via Together.ai SDK 1.x
 - **Map:** Folium + streamlit-folium
 - **Charts:** Plotly
 - **Data:** Miami-Dade County ArcGIS REST Services (~20 public endpoints)
@@ -89,7 +89,7 @@ API_MAX_RETRIES: int = 3
 API_RETRY_BACKOFF_FACTOR: float = 0.5
 
 # AI
-AI_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+AI_MODEL = "ServiceNow-AI/Apriel-1.6-15b-Thinker"
 AI_MAX_TOKENS: int = 1024
 AI_TEMPERATURE: float = 0.7
 
@@ -159,4 +159,9 @@ Session 4 (2026-03-24): Cross-tab state unification + AI assistant rewrite.
   - src/ui/filters.py: added key= params to all checkboxes and slider — filter state now auto-persists in session state (Map ↔ AI sync)
   - src/ui/ai_assistant.py: NEW production rewrite — reads resolved_coords (no re-geocoding when switching from Map tab), uses render_filter_sidebar(), uses src.api.* imports, uses Together chat completions API, all CLAUDE.md rules applied
   - app.py: updated Bot tab import from legacy root ai_assistant to src.ui.ai_assistant
-  Next: migrate dashboard.py imports from legacy root files (education.py etc.) to src.api.*; add fetch deduplication to dashboard.py (currently refetches on every tab switch); sync dashboard checkboxes with shared filter state.
+Session 5 (2026-03-24): Dashboard filter sync + fetch deduplication + model swap.
+  - src/ui/dashboard.py: NEW canonical location — src.api.* imports, render_filter_sidebar(), fetch dedup (dash_fetch_key/dash_data), loop caps, all CLAUDE.md rules applied
+  - src/bootstrap.py: added dash_fetch_key + dash_data session-state defaults
+  - app.py: updated Dashboard import from root dashboard to src.ui.dashboard
+  - src/constants.py: swapped AI_MODEL to ServiceNow-AI/Apriel-1.6-15b-Thinker
+  Next: migrate charts.py to src/ui/charts.py (still uses legacy root imports); retire root-level dashboard.py and charts.py.

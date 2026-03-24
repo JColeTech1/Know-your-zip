@@ -95,7 +95,7 @@ API_RETRY_DELAY_SECONDS: int = 2
 # AI Model (Together.ai)
 # ---------------------------------------------------------------------------
 
-AI_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+AI_MODEL = "ServiceNow-AI/Apriel-1.6-15b-Thinker"
 AI_MAX_TOKENS: int = 1024
 AI_TEMPERATURE: float = 0.7
 AI_GEOCODER_USER_AGENT = "miami_explorer"

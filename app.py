@@ -43,7 +43,7 @@ st.markdown("---")
 
 # Tab routing — delegate all logic to tab modules
 if st.session_state.current_page == "Dashboard":
-    import dashboard
+    from src.ui import dashboard
     dashboard.main()
 elif st.session_state.current_page == "Map":
     import map_explorer

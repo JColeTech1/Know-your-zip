@@ -38,6 +38,9 @@ _DEFAULTS: dict = {
     "filter_evacuation_routes": True,
     "filter_bus_routes": True,
     "filter_radius": DEFAULT_SEARCH_RADIUS_MILES,
+    # Dashboard tab fetch deduplication
+    "dash_fetch_key": "",
+    "dash_data": None,
 }
 
 
