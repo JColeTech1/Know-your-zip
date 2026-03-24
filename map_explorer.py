@@ -119,6 +119,27 @@ def _normalise_center(center: Any) -> list[float]:
     return list(center)
 
 
+def _filters_hash(filters: Any) -> str:
+    """Return a stable string key from all boolean filter flags and radius."""
+    flags = (
+        filters.show_public_schools,
+        filters.show_private_schools,
+        filters.show_charter_schools,
+        filters.show_police,
+        filters.show_fire,
+        filters.show_hospitals,
+        filters.show_mental_health,
+        filters.show_clinics,
+        filters.show_bus_stops,
+        filters.show_libraries,
+        filters.show_parks,
+        filters.show_flood_zones,
+        filters.show_evacuation_routes,
+        filters.show_bus_routes,
+    )
+    return "|".join(str(int(f)) for f in flags)
+
+
 # ---------------------------------------------------------------------------
 # Main entry point (called by app.py)
 # ---------------------------------------------------------------------------
@@ -144,6 +165,9 @@ def main() -> None:
                 submitted = st.form_submit_button("Enter Location")
             filters = render_filter_sidebar()
 
+        if st.session_state.get("resolved_coords") and st.session_state.get("last_location"):
+            st.caption(f"Currently showing: {st.session_state.last_location}")
+
         if submitted:
             if not location_input:
                 st.error("Please enter an address or ZIP code.")
@@ -153,16 +177,25 @@ def main() -> None:
                     st.session_state.map_center = list(coords)
                     st.session_state.zoom_level = MIAMI_SEARCH_ZOOM
                     st.session_state.last_location = location_input
+                    st.session_state.resolved_coords = coords
 
-                    with st.spinner("Fetching data…"):
-                        st.session_state.markers = build_markers(
-                            apis, zip_validator, coords, filters
-                        )
-                        geo = build_geo_data(apis["GeoData"], filters, coords)
-                        if geo:
-                            st.session_state.geo_data = geo
-                        elif hasattr(st.session_state, "geo_data"):
-                            del st.session_state.geo_data
+                    new_key = f"{location_input}|{filters.radius}|{_filters_hash(filters)}"
+                    if (
+                        st.session_state.fetch_key == new_key
+                        and st.session_state.markers
+                    ):
+                        st.info("Using cached results — data unchanged.")
+                    else:
+                        with st.spinner("Fetching data…"):
+                            st.session_state.markers = build_markers(
+                                apis, zip_validator, coords, filters
+                            )
+                            geo = build_geo_data(apis["GeoData"], filters, coords)
+                            if geo:
+                                st.session_state.geo_data = geo
+                            elif hasattr(st.session_state, "geo_data"):
+                                del st.session_state.geo_data
+                        st.session_state.fetch_key = new_key
 
                     st.success(
                         f"Found {len(st.session_state.markers) - 1} locations "

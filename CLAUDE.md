@@ -149,4 +149,9 @@ Follow this exact sequence — zero changes to `app.py` or any `src/ui/` file:
 **UPDATE THIS AT THE START OF EVERY SESSION.**
 
 Session 1 (2026-03-24): Writing CLAUDE.md + creating src/constants.py (Step 1 of 8 in the refactor plan).
-Session 2 (2026-03-24): Created all 5 domain API files (education, healthcare, emergency, infrastructure, geo) inheriting BaseAPIClient. Fixed broken imports in map_explorer.py and src/ui/data_fetcher.py. Next: create src/ui/dashboard.py and src/ui/ai_assistant.py (app.py imports them but they don't exist yet).
+Session 2 (2026-03-24): Created all 5 domain API files (education, healthcare, emergency, infrastructure, geo) inheriting BaseAPIClient. Fixed broken imports in map_explorer.py and src/ui/data_fetcher.py.
+Session 3 (2026-03-24): Caching + shared location state.
+  - src/bootstrap.py: added resolved_coords, fetch_key to shared session defaults
+  - map_explorer.py: added _filters_hash + fetch deduplication (skips re-fetch if key unchanged); stores resolved_coords for cross-tab sharing
+  - dashboard.py: reads resolved_coords from session state (no re-entry needed after Map search); fixed broken address branch (now calls _resolve_coords + _run_analysis); replaced magic numbers with src.constants values; extracted helpers to keep functions ≤40 lines; fixed fragile DataFrame column access
+  Next: migrate dashboard.py imports from legacy root files (education.py etc.) to src.api.* (separate session); build src/ui/ai_assistant.py.

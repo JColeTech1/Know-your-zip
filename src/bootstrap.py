@@ -18,6 +18,9 @@ _DEFAULTS: dict = {
     "markers": [],
     "messages": [],
     "location_data": None,
+    # Shared across tabs: set by map_explorer when a location is successfully resolved
+    "resolved_coords": None,   # tuple[float, float] | None
+    "fetch_key": None,         # str | None — hash of (location + radius + filter flags)
 }
 
 
