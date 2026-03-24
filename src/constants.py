@@ -161,6 +161,22 @@ CHART_COLOR_SEQUENCE = [COLOR_PRIMARY, COLOR_ACCENT_1, COLOR_SECONDARY, COLOR_AC
 
 CHART_HEIGHT: int = 450
 CHART_HISTOGRAM_BINS: int = 6
+CHART_HISTOGRAM_YAXIS_MAX: int = 40
+CHART_TITLE_FONT_SIZE: int = 24
+CHART_BAR_TEXT_FONT_SIZE: int = 14
+
+# Fire station proximity pie — distance-to-nearest thresholds (miles)
+FIRE_PROXIMITY_LABEL_NEAR: str = "0-1 mile"
+FIRE_PROXIMITY_LABEL_CLOSE: str = "2-3 miles"
+FIRE_PROXIMITY_LABEL_MEDIUM: str = "4-5 miles"
+FIRE_PROXIMITY_LABEL_FAR: str = "6+ miles"
+FIRE_PROXIMITY_NEAR_MAX: float = 1.0
+FIRE_PROXIMITY_CLOSE_MAX: float = 3.0
+FIRE_PROXIMITY_MEDIUM_MAX: float = 5.0
+
+# Additional coral tones for the proximity pie gradient
+COLOR_CORAL_LIGHTEST: str = "#FFDDD5"  # lightest coral (largest segment)
+COLOR_CORAL_MEDIUM: str = "#FF8C69"    # medium coral
 
 # ---------------------------------------------------------------------------
 # Coverage & Risk Score Thresholds

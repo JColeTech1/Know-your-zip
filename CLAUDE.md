@@ -164,4 +164,9 @@ Session 5 (2026-03-24): Dashboard filter sync + fetch deduplication + model swap
   - src/bootstrap.py: added dash_fetch_key + dash_data session-state defaults
   - app.py: updated Dashboard import from root dashboard to src.ui.dashboard
   - src/constants.py: swapped AI_MODEL to ServiceNow-AI/Apriel-1.6-15b-Thinker
-  Next: migrate charts.py to src/ui/charts.py (still uses legacy root imports); retire root-level dashboard.py and charts.py.
+Session 6 (2026-03-24): charts.py migration + root-file retirement.
+  - src/ui/charts.py: NEW canonical location — migrated plot_schools_histogram, plot_fire_station_proximity_pie, plot_zip_park_density_treemap + helper _get_schools_by_zip; fixed all imports to src.api.*; replaced geodesic with miles_between (src.utils.distance); added None-safety, loop caps, type annotations, constants for all magic values
+  - src/constants.py: added CHART_HISTOGRAM_YAXIS_MAX, CHART_TITLE_FONT_SIZE, CHART_BAR_TEXT_FONT_SIZE, FIRE_PROXIMITY_LABEL_*, FIRE_PROXIMITY_*_MAX, COLOR_CORAL_LIGHTEST, COLOR_CORAL_MEDIUM
+  - src/ui/dashboard.py: replaced legacy `from charts import` with `from src.ui.charts import`
+  - charts.py, dashboard.py (root): deleted (dead code — app.py already used src.ui.dashboard)
+  Next: audit src/zip_validator.py — legacy class has bare print() debug statements, bare dict, and no type annotations; candidate for future session refactor.

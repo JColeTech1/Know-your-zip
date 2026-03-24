@@ -15,8 +15,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# Legacy charts module kept until charts.py is migrated to src/ui/
-from charts import (  # type: ignore[import-untyped]
+from src.ui.charts import (
     plot_fire_station_proximity_pie,
     plot_schools_histogram,
     plot_zip_park_density_treemap,
