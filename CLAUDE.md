@@ -149,3 +149,4 @@ Follow this exact sequence — zero changes to `app.py` or any `src/ui/` file:
 **UPDATE THIS AT THE START OF EVERY SESSION.**
 
 Session 1 (2026-03-24): Writing CLAUDE.md + creating src/constants.py (Step 1 of 8 in the refactor plan).
+Session 2 (2026-03-24): Created all 5 domain API files (education, healthcare, emergency, infrastructure, geo) inheriting BaseAPIClient. Fixed broken imports in map_explorer.py and src/ui/data_fetcher.py. Next: create src/ui/dashboard.py and src/ui/ai_assistant.py (app.py imports them but they don't exist yet).
