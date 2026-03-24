@@ -170,3 +170,10 @@ Session 6 (2026-03-24): charts.py migration + root-file retirement.
   - src/ui/dashboard.py: replaced legacy `from charts import` with `from src.ui.charts import`
   - charts.py, dashboard.py (root): deleted (dead code — app.py already used src.ui.dashboard)
   Next: audit src/zip_validator.py — legacy class has bare print() debug statements, bare dict, and no type annotations; candidate for future session refactor.
+Session 7 (2026-03-24): Unified location state + canonical map_explorer migration.
+  - src/ui/map_explorer.py: NEW canonical location — migrated from root map_explorer.py; removed redundant _init_session_state(); added st.session_state["location_submitted"] = True after successful fetch
+  - app.py: fixed Map tab import to `from src.ui import map_explorer` (consistent with Dashboard/AI)
+  - src/bootstrap.py: added location_submitted: False and ai_context_key: None to _DEFAULTS
+  - src/ui/dashboard.py: removed location form + _resolve_coords/_get_coords_for_input/_render_valid_zips helpers; main() now reads resolved_coords/last_location from session state; shows info banner if location_submitted is False
+  - src/ui/ai_assistant.py: removed location form + _resolve_location/_handle_location_submit/_render_location_panel; added _ensure_location_context() auto-builds AI context from session state on radius/location change; shows info banner if location_submitted is False
+  Next: Session 8 — pickle cache + ThreadPoolExecutor in BaseAPIClient + charts.py
