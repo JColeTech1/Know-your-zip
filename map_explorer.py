@@ -18,11 +18,11 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from education import EducationAPI
-from emergency_services import EmergencyServicesAPI
-from geo_data import GeoDataAPI
-from healthcare import HealthcareAPI
-from infrastructure import BusStopsAPI, LibrariesAPI, ParksAPI
+from src.api.education import EducationAPI
+from src.api.emergency import EmergencyServicesAPI
+from src.api.geo import GeoDataAPI
+from src.api.healthcare import HealthcareAPI
+from src.api.infrastructure import BusStopsAPI, LibrariesAPI, ParksAPI
 from src.constants import (
     MAP_DEFAULT_HEIGHT,
     MAP_DEFAULT_WIDTH,

@@ -12,11 +12,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from education import EducationAPI
-from emergency_services import EmergencyServicesAPI
-from geo_data import GeoDataAPI
-from healthcare import HealthcareAPI
-from infrastructure import BusStopsAPI, LibrariesAPI, ParksAPI
+from src.api.education import EducationAPI
+from src.api.emergency import EmergencyServicesAPI
+from src.api.geo import GeoDataAPI
+from src.api.healthcare import HealthcareAPI
+from src.api.infrastructure import BusStopsAPI, LibrariesAPI, ParksAPI
 
 from src.constants import MARKER_COLOR
 from src.ui.filters import FilterState, filter_geographic_data
