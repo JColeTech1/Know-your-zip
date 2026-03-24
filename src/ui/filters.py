@@ -9,6 +9,7 @@ with no Streamlit calls.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,13 +19,18 @@ from src.constants import (
     DEFAULT_SEARCH_RADIUS_MILES,
     MAX_SEARCH_RADIUS_MILES,
     MIN_SEARCH_RADIUS_MILES,
+    ZIP_CODE_PATTERN,
 )
 from src.utils.distance import miles_between
+from src.utils.geocoder import geocode_address
+from src.zip_validator import ZIPValidator
 
 logger = logging.getLogger(__name__)
 
 # Type alias
 LatLon = tuple[float, float]
+
+_ZIP_RE = re.compile(ZIP_CODE_PATTERN)
 
 
 @dataclass
@@ -46,6 +52,60 @@ class FilterState:
     show_evacuation_routes: bool
     show_bus_routes: bool
     radius: float
+
+
+@st.cache_resource
+def _get_zip_validator() -> ZIPValidator:
+    """Process-level singleton so ZIP data loads only once."""
+    return ZIPValidator()
+
+
+def _resolve_location_input(location_input: str) -> LatLon | None:
+    """Geocode a ZIP code or address → (lat, lon), or None on failure."""
+    if _ZIP_RE.match(location_input):
+        zv = _get_zip_validator()
+        is_valid, _msg, coords = zv.validate_zip(location_input)
+        return coords if is_valid and coords else None
+    return geocode_address(location_input)
+
+
+def render_location_form() -> None:
+    """
+    Render a location entry form usable on any tab.
+
+    On submit, stores resolved_coords, last_location, and location_submitted
+    in session state and invalidates fetch-dedup keys so data refreshes.
+    """
+    with st.form(key="location_form_sidebar", clear_on_submit=False):
+        in_col, btn_col = st.columns([4, 1])
+        with in_col:
+            location_input = st.text_input(
+                "Enter your address or ZIP code",
+                value=st.session_state.get("last_location", ""),
+            )
+        with btn_col:
+            st.write("")  # vertical alignment nudge
+            submitted = st.form_submit_button("Set Location")
+
+    if submitted:
+        clean = location_input.strip()
+        if not clean:
+            st.error("Please enter an address or ZIP code.")
+            return
+        coords = _resolve_location_input(clean)
+        if coords:
+            st.session_state.resolved_coords = coords
+            st.session_state.last_location = clean
+            st.session_state.location_submitted = True
+            st.session_state.fetch_key = None
+            st.session_state.dash_fetch_key = ""
+            st.session_state.ai_context_key = None
+            st.success(f"Location set: {clean}")
+        else:
+            st.error(
+                "Location not found. Try a Miami-Dade ZIP code (e.g. 33186) "
+                "or full street address."
+            )
 
 
 def render_filter_sidebar() -> FilterState:
@@ -80,6 +140,7 @@ def render_filter_sidebar() -> FilterState:
         "Search radius (miles)",
         MIN_SEARCH_RADIUS_MILES,
         MAX_SEARCH_RADIUS_MILES,
+        value=st.session_state.get("filter_radius", DEFAULT_SEARCH_RADIUS_MILES),
         key="filter_radius",
     )
 

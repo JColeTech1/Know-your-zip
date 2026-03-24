@@ -27,7 +27,7 @@ from src.constants import (
     AI_TEMPERATURE,
 )
 from src.ui.data_fetcher import build_markers
-from src.ui.filters import FilterState, render_filter_sidebar
+from src.ui.filters import FilterState, render_filter_sidebar, render_location_form
 from src.zip_validator import ZIPValidator
 
 logger = logging.getLogger(__name__)
@@ -219,11 +219,10 @@ def main() -> None:
         st.error(str(exc))
         st.stop()
 
-    # Location banner — read-only; location is set on the Map Explorer tab
-    if not st.session_state.get("location_submitted"):
-        st.info("Enter a location on the **Map Explorer** tab to enable location-aware answers.")
-    else:
-        location_label: str = st.session_state.get("last_location", "")
+    # Location entry — available on all tabs
+    render_location_form()
+    location_label: str = st.session_state.get("last_location", "")
+    if location_label:
         st.caption(f"📍 Location context: **{location_label}**")
 
     # Filter sidebar drives context granularity

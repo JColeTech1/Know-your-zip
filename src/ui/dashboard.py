@@ -41,7 +41,7 @@ from src.constants import (
     RISK_WEIGHT_HEALTHCARE,
     RISK_WEIGHT_INFRASTRUCTURE,
 )
-from src.ui.filters import FilterState, render_filter_sidebar
+from src.ui.filters import FilterState, render_filter_sidebar, render_location_form
 from src.utils.distance import is_within_radius
 from src.zip_validator import ZIPValidator
 
@@ -368,21 +368,21 @@ def main() -> None:
     st.header("📊 Miami-Dade County Overview")
     _render_overview_charts()
 
-    if not st.session_state.get("location_submitted"):
-        st.info("Enter a location on the **Map Explorer** tab first.")
-        return
-
-    coords: LatLon = st.session_state["resolved_coords"]
-    location_label: str = st.session_state.get("last_location", "")
-
     control_col, main_col = st.columns([1, 3])
 
     with control_col:
         st.subheader("Control Panel")
-        st.caption(f"Showing data for: **{location_label}**")
+        render_location_form()
+        location_label: str = st.session_state.get("last_location", "")
+        if location_label:
+            st.caption(f"Showing data for: **{location_label}**")
         filters: FilterState = render_filter_sidebar()
 
     with main_col:
+        if not st.session_state.get("location_submitted"):
+            st.info("Enter a location in the panel on the left to see local area insights.")
+            return
+        coords: LatLon = st.session_state["resolved_coords"]
         st.header("🎯 Local Area Insights")
         st.success(f"Showing results for: {location_label}")
         try:
