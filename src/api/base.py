@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import requests
@@ -20,6 +21,7 @@ from src.constants import (
     API_RETRY_BACKOFF_FACTOR,
     API_RETRY_DELAY_SECONDS,
     API_TIMEOUT_SECONDS,
+    FETCH_MANY_MAX_WORKERS,
 )
 
 logger = logging.getLogger(__name__)
@@ -135,3 +137,36 @@ class BaseAPIClient:
         raise ArcGISError(
             f"All {API_MAX_RETRIES} attempts failed for {url}"
         ) from last_exc
+
+    def fetch_many(
+        self,
+        requests_: list[tuple[str, dict[str, str] | None]],
+        *,
+        max_workers: int = FETCH_MANY_MAX_WORKERS,
+    ) -> list[dict[str, Any]]:
+        """
+        Fetch multiple ArcGIS endpoints in parallel.
+
+        Args:
+            requests_: List of (path, params) pairs forwarded to self.fetch().
+                       Use full_url by passing an empty path and a params dict
+                       with a "full_url" key, or call fetch() directly.
+            max_workers: Thread pool size (default: FETCH_MANY_MAX_WORKERS).
+
+        Returns:
+            Results in the same order as *requests_*.
+            Any failed request is represented by an empty dict {}.
+        """
+        results: list[dict[str, Any]] = [{} for _ in requests_]
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(self.fetch, path, params=params): idx
+                for idx, (path, params) in enumerate(requests_)
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    results[idx] = future.result()
+                except ArcGISError as exc:
+                    logger.error("fetch_many: request %d failed: %s", idx, exc)
+        return results

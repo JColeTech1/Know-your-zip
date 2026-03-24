@@ -176,4 +176,12 @@ Session 7 (2026-03-24): Unified location state + canonical map_explorer migratio
   - src/bootstrap.py: added location_submitted: False and ai_context_key: None to _DEFAULTS
   - src/ui/dashboard.py: removed location form + _resolve_coords/_get_coords_for_input/_render_valid_zips helpers; main() now reads resolved_coords/last_location from session state; shows info banner if location_submitted is False
   - src/ui/ai_assistant.py: removed location form + _resolve_location/_handle_location_submit/_render_location_panel; added _ensure_location_context() auto-builds AI context from session state on radius/location change; shows info banner if location_submitted is False
-  Next: Session 8 — pickle cache + ThreadPoolExecutor in BaseAPIClient + charts.py
+Session 8 (2026-03-24): Pickle cache + ThreadPoolExecutor in BaseAPIClient.
+  - src/constants.py: added CACHE_KEY_SCHOOLS_BY_ZIP, FETCH_MANY_MAX_WORKERS
+  - src/utils/data_loader.py: NEW — typed pickle cache helpers (load_pickle, save_pickle, is_cache_valid, cache_path)
+  - src/api/base.py: added fetch_many() with ThreadPoolExecutor for parallel ArcGIS requests
+  - src/ui/charts.py: replaced @st.cache_data on _get_schools_by_zip() with disk pickle cache (load_pickle/save_pickle); cache persists across server restarts
+Session 9 (2026-03-24): ZIPValidator rewrite + legacy root file retirement.
+  - src/zip_validator.py: full rewrite — removed all print() statements; replaced with structured logger calls; added type annotations; used ARCGIS_BASE_URL+SERVICE_ZIP_CODES+API_TIMEOUT_SECONDS from constants; uses src.utils.distance.miles_between; loop caps with MAX_FEATURES_PER_REQUEST
+  - Deleted root-level legacy files: education.py, emergency_services.py, geo_data.py, healthcare.py, infrastructure.py, ai_assistant.py, map_explorer.py, __init__.py
+  Next: Session 10 — mypy + ruff clean pass; src/utils/zip_validator.py migration (canonical location per CLAUDE.md)

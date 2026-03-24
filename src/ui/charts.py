@@ -19,6 +19,7 @@ from src.api.education import EducationAPI
 from src.api.emergency import EmergencyServicesAPI
 from src.api.infrastructure import ParksAPI
 from src.constants import (
+    CACHE_KEY_SCHOOLS_BY_ZIP,
     CHART_BAR_TEXT_FONT_SIZE,
     CHART_HEIGHT,
     CHART_HISTOGRAM_BINS,
@@ -38,6 +39,7 @@ from src.constants import (
     FIRE_PROXIMITY_NEAR_MAX,
     MAX_FEATURES_PER_REQUEST,
 )
+from src.utils.data_loader import load_pickle, save_pickle
 from src.utils.distance import miles_between
 from src.zip_validator import ZIPValidator
 
@@ -85,14 +87,21 @@ def _title_layout(text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@st.cache_data
 def _get_schools_by_zip() -> pd.DataFrame:
     """
     Fetch school counts for every Miami-Dade ZIP code.
 
+    Checks the pickle disk cache first; falls back to the ArcGIS API on a
+    cache miss and writes the result to disk for subsequent runs.
+
     Returns a DataFrame with columns:
       ZIP_Code, Public_Schools, Private_Schools, Charter_Schools, Total_Schools
     """
+    cached = load_pickle(CACHE_KEY_SCHOOLS_BY_ZIP, pd.DataFrame)
+    if cached is not None:
+        logger.debug("_get_schools_by_zip: cache hit")
+        return cached
+
     education_api = EducationAPI()
     zip_validator = ZIPValidator()
     zip_codes = list(zip_validator.get_all_zip_codes())[:MAX_FEATURES_PER_REQUEST]
@@ -117,7 +126,9 @@ def _get_schools_by_zip() -> pd.DataFrame:
             }
         )
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    save_pickle(CACHE_KEY_SCHOOLS_BY_ZIP, df)
+    return df
 
 
 # ---------------------------------------------------------------------------

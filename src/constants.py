@@ -108,6 +108,16 @@ CACHE_TTL_SECONDS: int = 3600
 CACHE_DIRECTORY = "cache"
 CACHE_EXPIRY_DAYS: int = 1
 
+# Pickle cache keys for expensive county-wide chart data
+CACHE_KEY_SCHOOLS_BY_ZIP: str = "schools_by_zip"
+
+# ---------------------------------------------------------------------------
+# Concurrency
+# ---------------------------------------------------------------------------
+
+# Max threads used by BaseAPIClient.fetch_many() for parallel ArcGIS requests
+FETCH_MANY_MAX_WORKERS: int = 4
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------

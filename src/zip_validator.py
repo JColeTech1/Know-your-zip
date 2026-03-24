@@ -1,353 +1,259 @@
+"""
+ZIPValidator — Miami-Dade County ZIP code lookup and geometry helpers.
+
+Fetches the canonical ZIP boundary dataset from the ArcGIS REST service
+and exposes helpers used by charts.py and dashboard.py.
+"""
+
+from __future__ import annotations
+
+import logging
 import re
-from typing import Dict, Optional, Tuple, List, Set
-import pandas as pd
-from geopy.distance import geodesic
+from typing import Any
+
 import requests
-import json
-from shapely.geometry import Polygon, MultiPolygon, Point
+from shapely.geometry import MultiPolygon, Point, Polygon
+
+from src.constants import (
+    API_TIMEOUT_SECONDS,
+    ARCGIS_BASE_URL,
+    ARCGIS_QUERY_PARAMS,
+    MAX_FEATURES_PER_REQUEST,
+    MAX_NEAREST_ZIP_MILES,
+    SERVICE_ZIP_CODES,
+)
+from src.utils.distance import miles_between
+
+logger = logging.getLogger(__name__)
+
+# Compiled once at module load
+_ZIP_PATTERN = re.compile(r"^\d{5}$")
+
+# Type alias for the internal per-ZIP record
+_ZipRecord = dict[str, Any]
+
+LatLon = tuple[float, float]
+
+
+def _polygon_centroid(coordinates: list[Any]) -> LatLon:
+    """Return the mean centroid of a flat or nested coordinate list."""
+    lats: list[float] = []
+    lons: list[float] = []
+    for coord in coordinates:
+        if isinstance(coord[0], list):
+            for point in coord:
+                lons.append(float(point[0]))
+                lats.append(float(point[1]))
+        else:
+            lons.append(float(coord[0]))
+            lats.append(float(coord[1]))
+    return sum(lats) / len(lats), sum(lons) / len(lons)
+
+
+def _build_database(features: list[dict[str, Any]]) -> dict[str, _ZipRecord]:
+    """Convert a GeoJSON feature list into the internal ZIP database."""
+    database: dict[str, _ZipRecord] = {}
+    for feature in features:
+        props: dict[str, Any] = feature.get("properties") or {}
+        geom: dict[str, Any] = feature.get("geometry") or {}
+        if "ZIPCODE" not in props or not geom.get("coordinates"):
+            continue
+        zip_code = str(props["ZIPCODE"])
+        coords = geom["coordinates"]
+        geom_type: str = geom.get("type", "")
+        try:
+            if geom_type == "Polygon":
+                center = _polygon_centroid(coords[0])
+            elif geom_type == "Point":
+                center = (float(coords[1]), float(coords[0]))
+            elif geom_type == "MultiPolygon":
+                center = _polygon_centroid(coords[0][0])
+            else:
+                logger.warning("ZIPValidator: unsupported geometry %s for ZIP %s", geom_type, zip_code)
+                continue
+        except Exception as exc:
+            logger.error("ZIPValidator: centroid failed for ZIP %s: %s", zip_code, exc)
+            continue
+        database[zip_code] = {
+            "zipcode": zip_code,
+            "geometry": geom,
+            "center": center,
+            "properties": props,
+        }
+    return database
+
 
 class ZIPValidator:
-    def __init__(self):
-        # Basic ZIP code pattern (5 digits)
-        self.zip_pattern = re.compile(r'^\d{5}$')
-        
-        # Miami-Dade County API endpoint
-        self.api_endpoint = 'https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/arcgis/rest/services/ZipCode_gdb/FeatureServer/0/query'
-        
-        # Initialize ZIP code database
-        self.zip_database: Dict[str, Dict] = {}
-        self.refresh_zip_database()
+    """Miami-Dade County ZIP code lookup and geometry helper."""
 
-    def fetch_zip_data(self) -> List[Dict]:
-        """
-        Fetch ZIP code data from Miami-Dade County API.
-        
-        Returns:
-            List[Dict]: List of ZIP code data dictionaries
-        """
-        print(f"Fetching ZIP data from {self.api_endpoint}")  # Debug log
-        params = {
-            'where': '1=1',
-            'outFields': '*',
-            'f': 'geojson'
-        }
-        
+    def __init__(self) -> None:
+        self.zip_database: dict[str, _ZipRecord] = {}
+        self._refresh_zip_database()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _fetch_zip_features(self) -> list[dict[str, Any]]:
+        """Fetch raw GeoJSON features from the ArcGIS ZIP code service."""
+        url = f"{ARCGIS_BASE_URL}{SERVICE_ZIP_CODES}"
         try:
-            print("Sending request to API...")  # Debug log
-            response = requests.get(self.api_endpoint, params=params)
+            response = requests.get(
+                url,
+                params=dict(ARCGIS_QUERY_PARAMS),
+                timeout=API_TIMEOUT_SECONDS,
+            )
             response.raise_for_status()
-            data = response.json()
-            
-            if 'features' in data:
-                print(f"Successfully fetched {len(data['features'])} features from API")  # Debug log
-                return data['features']
-            else:
-                print("No 'features' found in API response")  # Debug log
-                print(f"API response keys: {list(data.keys())}")  # Debug log
-        except requests.exceptions.RequestException as e:
-            print(f"Request error fetching ZIP data: {str(e)}")  # Debug log
-        except json.JSONDecodeError as e:
-            print(f"JSON decode error fetching ZIP data: {str(e)}")  # Debug log
-            print(f"Response content: {response.text[:200]}...")  # Debug log first 200 chars
-        except Exception as e:
-            print(f"Error fetching ZIP data: {str(e)}")  # Debug log
-        
+            data: dict[str, Any] = response.json()
+            features: list[dict[str, Any]] = data.get("features", [])
+            logger.info("ZIPValidator: fetched %d ZIP features", len(features))
+            return features
+        except requests.exceptions.Timeout:
+            logger.error("ZIPValidator: request timed out fetching ZIP codes")
+        except requests.exceptions.HTTPError as exc:
+            logger.error("ZIPValidator: HTTP error fetching ZIP codes: %s", exc)
+        except requests.exceptions.RequestException as exc:
+            logger.error("ZIPValidator: request error fetching ZIP codes: %s", exc)
+        except ValueError as exc:
+            logger.error("ZIPValidator: JSON decode error fetching ZIP codes: %s", exc)
         return []
 
-    def calculate_polygon_centroid(self, coordinates: List[List[float]]) -> Tuple[float, float]:
-        """Calculate the centroid of a polygon"""
-        lats = []
-        lons = []
-        for coord in coordinates:
-            if isinstance(coord[0], list):
-                # Handle nested coordinates (polygons)
-                for point in coord:
-                    lons.append(point[0])
-                    lats.append(point[1])
-            else:
-                # Handle flat coordinates (points)
-                lons.append(coord[0])
-                lats.append(coord[1])
-        
-        return sum(lats) / len(lats), sum(lons) / len(lons)
+    def _refresh_zip_database(self) -> None:
+        """Populate the internal ZIP database from the ArcGIS service."""
+        features = self._fetch_zip_features()
+        self.zip_database = _build_database(features)
+        logger.info("ZIPValidator: database ready, %d ZIPs loaded", len(self.zip_database))
 
-    def refresh_zip_database(self):
-        """Refresh the ZIP code database with latest data from API"""
-        print("Starting ZIP database refresh...")  # Debug log
-        features = self.fetch_zip_data()
-        print(f"Fetched {len(features)} ZIP features from API")  # Debug log
-        
-        for feature in features:
-            props = feature.get('properties', {})
-            geom = feature.get('geometry', {})
-            
-            if 'ZIPCODE' in props and geom.get('coordinates'):
-                zip_code = str(props['ZIPCODE'])
-                coords = geom['coordinates']
-                
-                try:
-                    # Calculate centroid based on geometry type
-                    if geom['type'] == 'Polygon':
-                        center_lat, center_lon = self.calculate_polygon_centroid(coords[0])
-                        print(f"Processed Polygon ZIP {zip_code}: center at ({center_lat}, {center_lon})")  # Debug log
-                    elif geom['type'] == 'Point':
-                        center_lat, center_lon = coords[1], coords[0]
-                        print(f"Processed Point ZIP {zip_code}: center at ({center_lat}, {center_lon})")  # Debug log
-                    elif geom['type'] == 'MultiPolygon':
-                        # Use the first polygon for the centroid
-                        center_lat, center_lon = self.calculate_polygon_centroid(coords[0][0])
-                        print(f"Processed MultiPolygon ZIP {zip_code}: center at ({center_lat}, {center_lon})")  # Debug log
-                    else:
-                        print(f"Unsupported geometry type: {geom['type']} for ZIP {zip_code}")  # Debug log
-                        continue
-                    
-                    self.zip_database[zip_code] = {
-                        'zipcode': zip_code,
-                        'geometry': geom,
-                        'center': (center_lat, center_lon),
-                        'properties': props
-                    }
-                except Exception as e:
-                    print(f"Error processing ZIP code {zip_code}: {str(e)}")
-        
-        print(f"ZIP database refresh complete. Total ZIPs: {len(self.zip_database)}")  # Debug log
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
 
     def validate_format(self, zip_code: str) -> bool:
-        """
-        Validate if the ZIP code matches the standard 5-digit format.
-        
-        Args:
-            zip_code (str): The ZIP code to validate
-            
-        Returns:
-            bool: True if valid format, False otherwise
-        """
-        return bool(self.zip_pattern.match(zip_code))
+        """Return True if *zip_code* matches the 5-digit pattern."""
+        return bool(_ZIP_PATTERN.match(zip_code))
 
-    def get_zip_info(self, zip_code: str) -> Optional[Dict]:
-        """
-        Get information about a ZIP code if it exists in Miami-Dade County.
-        
-        Args:
-            zip_code (str): The ZIP code to look up
-            
-        Returns:
-            Optional[Dict]: Dictionary containing ZIP code information if found, None otherwise
-        """
+    def get_zip_info(self, zip_code: str) -> _ZipRecord | None:
+        """Return the internal record for *zip_code*, or None if not found."""
         if not self.validate_format(zip_code):
             return None
-            
         return self.zip_database.get(zip_code)
 
-    def get_nearby_zips(self, zip_code: str, radius_miles: float = 5.0) -> List[str]:
-        """
-        Get nearby ZIP codes within specified radius.
-        
-        Args:
-            zip_code (str): The center ZIP code
-            radius_miles (float): Radius in miles to search
-            
-        Returns:
-            List[str]: List of nearby ZIP codes
-        """
+    def get_zip_coordinates(self, zip_code: str) -> LatLon | None:
+        """Return (lat, lon) centroid for *zip_code*, or None."""
+        record = self.get_zip_info(zip_code)
+        if record:
+            center: LatLon = record["center"]
+            return center
+        return None
+
+    def get_all_zip_codes(self) -> set[str]:
+        """Return all loaded Miami-Dade ZIP codes."""
+        return set(self.zip_database.keys())
+
+    def get_nearby_zips(self, zip_code: str, radius_miles: float = 5.0) -> list[str]:
+        """Return ZIP codes whose centroids are within *radius_miles* of *zip_code*."""
         if not self.validate_format(zip_code) or zip_code not in self.zip_database:
             return []
-            
-        center = self.zip_database[zip_code]['center']
-        nearby = []
-        
-        for other_zip, data in self.zip_database.items():
+        center: LatLon = self.zip_database[zip_code]["center"]
+        nearby: list[str] = []
+        for other_zip, record in self.zip_database.items():
             if other_zip != zip_code:
-                distance = geodesic(center, data['center']).miles
-                if distance <= radius_miles:
+                if miles_between(center, record["center"]) <= radius_miles:
                     nearby.append(other_zip)
-        
         return nearby
 
-    def validate_zip(self, zip_code: str) -> Tuple[bool, str, Optional[Dict]]:
+    def validate_zip(self, zip_code: str) -> tuple[bool, str, _ZipRecord | None]:
         """
-        Comprehensive validation of a ZIP code.
-        
-        Args:
-            zip_code (str): The ZIP code to validate
-            
+        Full validation of a ZIP code.
+
         Returns:
-            Tuple[bool, str, Optional[Dict]]: 
-                - bool: Whether the ZIP code is valid
-                - str: Message explaining the validation result
-                - Optional[Dict]: ZIP code information if valid and found
+            (is_valid, message, info_or_None)
         """
         if not self.validate_format(zip_code):
             return False, "Invalid ZIP code format. Must be 5 digits.", None
-            
-        info = self.get_zip_info(zip_code)
-        if info is None:
+        record = self.get_zip_info(zip_code)
+        if record is None:
             return False, "ZIP code not found in Miami-Dade County.", None
-            
-        return True, f"Valid Miami-Dade County ZIP code.", info
-
-    def get_all_zip_codes(self) -> Set[str]:
-        """
-        Get all valid Miami-Dade County ZIP codes.
-        
-        Returns:
-            Set[str]: Set of all valid ZIP codes
-        """
-        return set(self.zip_database.keys())
-
-    def get_zip_coordinates(self, zip_code: str) -> Optional[Tuple[float, float]]:
-        """
-        Get the center coordinates of a ZIP code area.
-        
-        Args:
-            zip_code (str): The ZIP code to look up
-            
-        Returns:
-            Optional[Tuple[float, float]]: (latitude, longitude) if found, None otherwise
-        """
-        info = self.get_zip_info(zip_code)
-        if info:
-            return info['center']
-        return None
+        return True, "Valid Miami-Dade County ZIP code.", record
 
     def get_zip_area(self, zip_code: str) -> float:
         """
-        Get the approximate area of a ZIP code in square miles.
-        
-        Args:
-            zip_code (str): The ZIP code to calculate area for
-            
-        Returns:
-            float: Area in square miles, or 1.0 if calculation fails
+        Approximate area of a ZIP code in square miles.
+
+        Returns 1.0 if the geometry is unavailable or the calculation fails.
         """
-        info = self.get_zip_info(zip_code)
-        if not info or 'geometry' not in info:
+        record = self.get_zip_info(zip_code)
+        if not record or "geometry" not in record:
             return 1.0
-            
+        geom: dict[str, Any] = record["geometry"]
         try:
-            geom = info['geometry']
-            if geom['type'] == 'Polygon':
-                coords = geom['coordinates'][0]
-                polygon = Polygon(coords)
-                # Convert square degrees to approximate square miles
-                # at Miami's latitude (25.7617° N)
-                return polygon.area * 4000
-            elif geom['type'] == 'MultiPolygon':
-                total_area = 0
-                for poly_coords in geom['coordinates']:
-                    polygon = Polygon(poly_coords[0])
-                    total_area += polygon.area
-                return total_area * 4000
-        except Exception as e:
-            print(f"Error calculating area for ZIP {zip_code}: {str(e)}")
-        
-        return 1.0  # Default area if calculation fails
+            if geom["type"] == "Polygon":
+                polygon = Polygon(geom["coordinates"][0])
+                return float(polygon.area * 4000)
+            if geom["type"] == "MultiPolygon":
+                total = sum(
+                    Polygon(ring[0]).area
+                    for ring in geom["coordinates"][:MAX_FEATURES_PER_REQUEST]
+                )
+                return float(total * 4000)
+        except Exception as exc:
+            logger.error("ZIPValidator: area calculation failed for ZIP %s: %s", zip_code, exc)
+        return 1.0
 
     def is_point_in_zip(self, lat: float, lon: float, zip_code: str) -> bool:
-        """
-        Check if a point falls within a ZIP code's boundaries.
-        
-        Args:
-            lat (float): Latitude of the point
-            lon (float): Longitude of the point
-            zip_code (str): ZIP code to check
-            
-        Returns:
-            bool: True if point is within ZIP code boundaries, False otherwise
-        """
-        info = self.get_zip_info(zip_code)
-        if not info or 'geometry' not in info:
+        """Return True if (lat, lon) falls within *zip_code* boundaries."""
+        record = self.get_zip_info(zip_code)
+        if not record or "geometry" not in record:
             return False
-            
+        point = Point(lon, lat)
+        geom: dict[str, Any] = record["geometry"]
         try:
-            point = Point(lon, lat)  # GeoJSON uses (lon, lat) order
-            geom = info['geometry']
-            
-            if geom['type'] == 'Polygon':
-                polygon = Polygon(geom['coordinates'][0])
-                return polygon.contains(point)
-            elif geom['type'] == 'MultiPolygon':
-                for poly_coords in geom['coordinates']:
-                    polygon = Polygon(poly_coords[0])
-                    if polygon.contains(point):
+            if geom["type"] == "Polygon":
+                return bool(Polygon(geom["coordinates"][0]).contains(point))
+            if geom["type"] == "MultiPolygon":
+                for ring in geom["coordinates"]:
+                    if Polygon(ring[0]).contains(point):
                         return True
-            
-        except Exception as e:
-            print(f"Error checking point in ZIP {zip_code}: {str(e)}")
-        
+        except Exception as exc:
+            logger.error("ZIPValidator: point-in-zip failed for %s: %s", zip_code, exc)
         return False
 
-    def get_zip_geojson(self) -> dict:
+    def get_closest_zip(self, coordinates: LatLon) -> str | None:
         """
-        Get a GeoJSON object containing all ZIP code boundaries.
-        
-        Returns:
-            dict: GeoJSON object with all ZIP code boundaries
-        """
-        features = []
-        for zip_code, data in self.zip_database.items():
-            if 'geometry' in data:
-                feature = {
-                    'type': 'Feature',
-                    'properties': {
-                        'ZIP_Code': zip_code
-                    },
-                    'geometry': data['geometry']
-                }
-                features.append(feature)
-        
-        return {
-            'type': 'FeatureCollection',
-            'features': features
-        }
+        Return the ZIP code whose centroid is nearest to *coordinates*.
 
-    def get_closest_zip(self, coordinates: Tuple[float, float]) -> Optional[str]:
+        Returns None if no ZIP is found within MAX_NEAREST_ZIP_MILES.
         """
-        Find the closest ZIP code to the given coordinates.
-        
-        Args:
-            coordinates (Tuple[float, float]): (latitude, longitude) coordinates
-            
-        Returns:
-            Optional[str]: The closest ZIP code if found, None otherwise
-        """
-        print(f"Finding closest ZIP to coordinates: {coordinates}")  # Debug log
-        
-        if not coordinates or len(coordinates) != 2:
-            print("Invalid coordinates provided")  # Debug log
-            return None
-            
-        lat, lon = coordinates
-        # Check if coordinates are within Miami-Dade County bounds (with some padding)
-        if not (24.8 <= lat <= 26.2 and -81.0 <= lon <= -79.8):
-            print(f"Coordinates ({lat}, {lon}) outside Miami-Dade County bounds")  # Debug log
-            return None
-            
-        print(f"ZIP database has {len(self.zip_database)} entries")  # Debug log
-        
-        closest_zip = None
-        min_distance = float('inf')
-        
-        for zip_code, data in self.zip_database.items():
-            if 'center' not in data:
-                print(f"No center coordinates for ZIP {zip_code}")  # Debug log
-                continue
-                
-            zip_center = data['center']
+        closest_zip: str | None = None
+        min_distance = float("inf")
+        for zip_code, record in self.zip_database.items():
             try:
-                distance = geodesic(coordinates, zip_center).miles
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_zip = zip_code
-                    print(f"New closest ZIP: {zip_code} at {distance:.2f} miles")  # Debug log
-            except Exception as e:
-                print(f"Error calculating distance for ZIP {zip_code}: {str(e)}")  # Debug log
+                distance = miles_between(coordinates, record["center"])
+            except Exception as exc:
+                logger.warning("ZIPValidator: distance calc failed for ZIP %s: %s", zip_code, exc)
                 continue
-        
-        # Only return if we found a reasonably close ZIP code (within 10 miles)
-        if closest_zip and min_distance <= 10:
-            print(f"Found closest ZIP {closest_zip} at {min_distance:.2f} miles")  # Debug log
+            if distance < min_distance:
+                min_distance = distance
+                closest_zip = zip_code
+        if closest_zip and min_distance <= MAX_NEAREST_ZIP_MILES:
             return closest_zip
-        else:
-            print(f"No ZIP codes found within 10 miles (closest was {min_distance:.2f} miles away)")  # Debug log
-        return None 
+        logger.warning(
+            "ZIPValidator: no ZIP within %.1f miles of %s (closest was %.2f mi)",
+            MAX_NEAREST_ZIP_MILES,
+            coordinates,
+            min_distance,
+        )
+        return None
+
+    def get_zip_geojson(self) -> dict[str, Any]:
+        """Return a GeoJSON FeatureCollection of all loaded ZIP boundaries."""
+        features = [
+            {
+                "type": "Feature",
+                "properties": {"ZIP_Code": zip_code},
+                "geometry": record["geometry"],
+            }
+            for zip_code, record in self.zip_database.items()
+            if "geometry" in record
+        ]
+        return {"type": "FeatureCollection", "features": features}
