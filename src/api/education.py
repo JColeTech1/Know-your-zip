@@ -30,6 +30,30 @@ _PATH_MAP: dict[str, str] = {
 class EducationAPI(BaseAPIClient):
     """Fetches school records grouped by school type and ZIP code."""
 
+    def get_all_schools(self, school_type: str) -> dict[str, Any]:
+        """
+        Return all schools of the given type across Miami-Dade County.
+
+        Args:
+            school_type: One of "public", "private", or "charter".
+
+        Returns:
+            {"success": True,  "data": {"schools": [GeoJSON feature dicts]}}
+            {"success": False, "error": <message>}
+        """
+        path = _PATH_MAP.get(school_type)
+        if path is None:
+            return {"success": False, "error": f"Unknown school type: {school_type!r}"}
+
+        params: dict[str, str] = {"resultRecordCount": str(MAX_FEATURES_PER_REQUEST)}
+        try:
+            data = self.fetch(path, params=params)
+            features: list[Any] = data.get("features", [])
+            return {"success": True, "data": {"schools": features}}
+        except ArcGISError as exc:
+            logger.error("Failed to fetch all %s schools: %s", school_type, exc)
+            return {"success": False, "error": str(exc)}
+
     def get_schools_by_zip(
         self,
         zip_code: str,

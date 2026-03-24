@@ -19,16 +19,17 @@ from src.api.education import EducationAPI
 from src.api.emergency import EmergencyServicesAPI
 from src.api.infrastructure import ParksAPI
 from src.constants import (
-    CACHE_KEY_SCHOOLS_BY_ZIP,
+    CACHE_KEY_SCHOOLS_BY_LEVEL,
     CHART_BAR_TEXT_FONT_SIZE,
     CHART_HEIGHT,
-    CHART_HISTOGRAM_BINS,
-    CHART_HISTOGRAM_YAXIS_MAX,
+    CHART_SCHOOL_BARMODE,
     CHART_TITLE_FONT_SIZE,
     COLOR_ACCENT_2,
     COLOR_CORAL_LIGHTEST,
     COLOR_CORAL_MEDIUM,
-    COLOR_PRIMARY,
+    COLOR_SCHOOL_CHARTER,
+    COLOR_SCHOOL_PRIVATE,
+    COLOR_SCHOOL_PUBLIC,
     COLOR_SECONDARY,
     FIRE_PROXIMITY_CLOSE_MAX,
     FIRE_PROXIMITY_LABEL_CLOSE,
@@ -38,6 +39,9 @@ from src.constants import (
     FIRE_PROXIMITY_MEDIUM_MAX,
     FIRE_PROXIMITY_NEAR_MAX,
     MAX_FEATURES_PER_REQUEST,
+    SCHOOL_LEVEL_ELEMENTARY,
+    SCHOOL_LEVEL_HIGH,
+    SCHOOL_LEVEL_MIDDLE,
 )
 from src.utils.data_loader import load_pickle, save_pickle
 from src.utils.distance import miles_between
@@ -87,48 +91,55 @@ def _title_layout(text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _get_schools_by_zip() -> pd.DataFrame:
-    """
-    Fetch school counts for every Miami-Dade ZIP code.
+def _categorize_school_level(name: str) -> str:
+    """Infer school level (Elementary / Middle / High) from the school name."""
+    upper = name.upper()
+    if "HIGH" in upper:
+        return SCHOOL_LEVEL_HIGH
+    if "MIDDLE" in upper or "JUNIOR" in upper:
+        return SCHOOL_LEVEL_MIDDLE
+    return SCHOOL_LEVEL_ELEMENTARY
 
-    Checks the pickle disk cache first; falls back to the ArcGIS API on a
-    cache miss and writes the result to disk for subsequent runs.
 
-    Returns a DataFrame with columns:
-      ZIP_Code, Public_Schools, Private_Schools, Charter_Schools, Total_Schools
+def _get_all_schools_county_wide() -> dict[str, dict[str, int]]:
     """
-    cached = load_pickle(CACHE_KEY_SCHOOLS_BY_ZIP, pd.DataFrame)
+    Fetch all Miami-Dade schools and tally counts by (level, type).
+
+    Checks the pickle disk cache first (key: CACHE_KEY_SCHOOLS_BY_LEVEL);
+    falls back to 3 ArcGIS calls on a cache miss.
+
+    Returns:
+        {level: {"public": N, "private": N, "charter": N}}
+        where level ∈ {SCHOOL_LEVEL_ELEMENTARY, SCHOOL_LEVEL_MIDDLE, SCHOOL_LEVEL_HIGH}
+    """
+    cached = load_pickle(CACHE_KEY_SCHOOLS_BY_LEVEL, dict)
     if cached is not None:
-        logger.debug("_get_schools_by_zip: cache hit")
-        return cached
+        logger.debug("_get_all_schools_county_wide: cache hit")
+        return cached  # type: ignore[return-value]
+
+    counts: dict[str, dict[str, int]] = {
+        SCHOOL_LEVEL_ELEMENTARY: {"public": 0, "private": 0, "charter": 0},
+        SCHOOL_LEVEL_MIDDLE: {"public": 0, "private": 0, "charter": 0},
+        SCHOOL_LEVEL_HIGH: {"public": 0, "private": 0, "charter": 0},
+    }
 
     education_api = EducationAPI()
-    zip_validator = ZIPValidator()
-    zip_codes = list(zip_validator.get_all_zip_codes())[:MAX_FEATURES_PER_REQUEST]
+    school_types = ["public", "private", "charter"]
 
-    rows: list[dict[str, Any]] = []
-    for zip_code in zip_codes:
-        pub = education_api.get_schools_by_zip(zip_code, "public")
-        pri = education_api.get_schools_by_zip(zip_code, "private")
-        cha = education_api.get_schools_by_zip(zip_code, "charter")
+    for school_type in school_types:
+        result = education_api.get_all_schools(school_type)
+        if not result.get("success"):
+            logger.warning("Could not fetch %s schools: %s", school_type, result.get("error"))
+            continue
+        features: list[Any] = result["data"]["schools"][:MAX_FEATURES_PER_REQUEST]
+        for feature in features:
+            props: dict[str, Any] = feature.get("properties") or {}
+            name = str(props.get("NAME") or props.get("SCHOOL_NAME") or "")
+            level = _categorize_school_level(name)
+            counts[level][school_type] += 1
 
-        pub_count = len(pub.get("data", {}).get("schools", [])) if pub.get("success") else 0
-        pri_count = len(pri.get("data", {}).get("schools", [])) if pri.get("success") else 0
-        cha_count = len(cha.get("data", {}).get("schools", [])) if cha.get("success") else 0
-
-        rows.append(
-            {
-                "ZIP_Code": zip_code,
-                "Public_Schools": pub_count,
-                "Private_Schools": pri_count,
-                "Charter_Schools": cha_count,
-                "Total_Schools": pub_count + pri_count + cha_count,
-            }
-        )
-
-    df = pd.DataFrame(rows)
-    save_pickle(CACHE_KEY_SCHOOLS_BY_ZIP, df)
-    return df
+    save_pickle(CACHE_KEY_SCHOOLS_BY_LEVEL, counts)
+    return counts
 
 
 # ---------------------------------------------------------------------------
@@ -137,32 +148,58 @@ def _get_schools_by_zip() -> pd.DataFrame:
 
 
 def plot_schools_histogram() -> go.Figure:
-    """Histogram: distribution of total school count across ZIP codes."""
-    df = _get_schools_by_zip()
-    if df.empty:
-        return _empty_fig("No school data available.")
+    """
+    Stacked bar chart: school counts by level (Elementary / Middle / High School)
+    broken down by school type (Public / Private / Charter).
+    """
+    counts = _get_all_schools_county_wide()
+    levels = [SCHOOL_LEVEL_ELEMENTARY, SCHOOL_LEVEL_MIDDLE, SCHOOL_LEVEL_HIGH]
 
-    fig = px.histogram(
-        df,
-        x="Total_Schools",
-        nbins=CHART_HISTOGRAM_BINS,
-        title="School Distribution",
-        labels={"Total_Schools": "Number of Schools", "count": "Number of ZIPs"},
-        text_auto=True,
-        color_discrete_sequence=[COLOR_PRIMARY],
-    )
+    def _bar_text(lvl: str, stype: str) -> str:
+        n = counts[lvl][stype]
+        return str(n) if n > 0 else ""
+
+    traces = [
+        go.Bar(
+            name="Public",
+            x=levels,
+            y=[counts[lvl]["public"] for lvl in levels],
+            marker_color=COLOR_SCHOOL_PUBLIC,
+            text=[_bar_text(lvl, "public") for lvl in levels],
+            textposition="inside",
+            textfont={"size": CHART_BAR_TEXT_FONT_SIZE, "color": "white"},
+            insidetextanchor="middle",
+        ),
+        go.Bar(
+            name="Private",
+            x=levels,
+            y=[counts[lvl]["private"] for lvl in levels],
+            marker_color=COLOR_SCHOOL_PRIVATE,
+            text=[_bar_text(lvl, "private") for lvl in levels],
+            textposition="inside",
+            textfont={"size": CHART_BAR_TEXT_FONT_SIZE, "color": "white"},
+            insidetextanchor="middle",
+        ),
+        go.Bar(
+            name="Charter",
+            x=levels,
+            y=[counts[lvl]["charter"] for lvl in levels],
+            marker_color=COLOR_SCHOOL_CHARTER,
+            text=[_bar_text(lvl, "charter") for lvl in levels],
+            textposition="inside",
+            textfont={"size": CHART_BAR_TEXT_FONT_SIZE, "color": "white"},
+            insidetextanchor="middle",
+        ),
+    ]
+
+    fig = go.Figure(data=traces)
     fig.update_layout(
-        bargap=0.1,
-        xaxis_title="Number of Schools per ZIP",
-        yaxis_title="Number of ZIPs",
-        showlegend=False,
-        yaxis_range=[0, CHART_HISTOGRAM_YAXIS_MAX],
-        title=_title_layout("School Distribution"),
-    )
-    fig.update_traces(
-        textposition="inside",
-        textfont={"size": CHART_BAR_TEXT_FONT_SIZE, "color": "white"},
-        insidetextanchor="middle",
+        barmode=CHART_SCHOOL_BARMODE,
+        title=_title_layout("School Distribution by Level"),
+        xaxis_title="School Level",
+        yaxis_title="Number of Schools",
+        legend_title_text="School Type",
+        bargap=0.2,
     )
     return fig
 

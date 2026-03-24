@@ -110,6 +110,7 @@ CACHE_EXPIRY_DAYS: int = 1
 
 # Pickle cache keys for expensive county-wide chart data
 CACHE_KEY_SCHOOLS_BY_ZIP: str = "schools_by_zip"
+CACHE_KEY_SCHOOLS_BY_LEVEL: str = "schools_by_level"
 
 # ---------------------------------------------------------------------------
 # Concurrency
@@ -168,6 +169,15 @@ COLOR_SECONDARY = "#FF6B4A"    # coral
 COLOR_ACCENT_1 = "#4BBFD4"     # light blue
 COLOR_ACCENT_2 = "#FFB39A"     # light coral
 CHART_COLOR_SEQUENCE = [COLOR_PRIMARY, COLOR_ACCENT_1, COLOR_SECONDARY, COLOR_ACCENT_2]
+
+# School chart — level labels and per-type colors
+SCHOOL_LEVEL_ELEMENTARY: str = "Elementary"
+SCHOOL_LEVEL_MIDDLE: str = "Middle"
+SCHOOL_LEVEL_HIGH: str = "High School"
+COLOR_SCHOOL_PUBLIC: str = "#0E7C86"   # teal
+COLOR_SCHOOL_PRIVATE: str = "#4BBFD4"  # light blue
+COLOR_SCHOOL_CHARTER: str = "#FF6B4A"  # coral
+CHART_SCHOOL_BARMODE: str = "stack"
 
 CHART_HEIGHT: int = 450
 CHART_HISTOGRAM_BINS: int = 6
