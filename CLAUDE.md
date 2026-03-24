@@ -154,4 +154,9 @@ Session 3 (2026-03-24): Caching + shared location state.
   - src/bootstrap.py: added resolved_coords, fetch_key to shared session defaults
   - map_explorer.py: added _filters_hash + fetch deduplication (skips re-fetch if key unchanged); stores resolved_coords for cross-tab sharing
   - dashboard.py: reads resolved_coords from session state (no re-entry needed after Map search); fixed broken address branch (now calls _resolve_coords + _run_analysis); replaced magic numbers with src.constants values; extracted helpers to keep functions ≤40 lines; fixed fragile DataFrame column access
-  Next: migrate dashboard.py imports from legacy root files (education.py etc.) to src.api.* (separate session); build src/ui/ai_assistant.py.
+Session 4 (2026-03-24): Cross-tab state unification + AI assistant rewrite.
+  - src/bootstrap.py: added 15 filter_* keys + last_location + filter_radius to _DEFAULTS so filter state persists across tabs
+  - src/ui/filters.py: added key= params to all checkboxes and slider — filter state now auto-persists in session state (Map ↔ AI sync)
+  - src/ui/ai_assistant.py: NEW production rewrite — reads resolved_coords (no re-geocoding when switching from Map tab), uses render_filter_sidebar(), uses src.api.* imports, uses Together chat completions API, all CLAUDE.md rules applied
+  - app.py: updated Bot tab import from legacy root ai_assistant to src.ui.ai_assistant
+  Next: migrate dashboard.py imports from legacy root files (education.py etc.) to src.api.*; add fetch deduplication to dashboard.py (currently refetches on every tab switch); sync dashboard checkboxes with shared filter state.

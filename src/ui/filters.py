@@ -53,34 +53,34 @@ def render_filter_sidebar() -> FilterState:
     st.subheader("Select Categories to Display")
 
     st.write("Education")
-    show_public = st.checkbox("Public Schools", value=True)
-    show_private = st.checkbox("Private Schools", value=True)
-    show_charter = st.checkbox("Charter Schools", value=True)
+    show_public = st.checkbox("Public Schools", key="filter_public_schools")
+    show_private = st.checkbox("Private Schools", key="filter_private_schools")
+    show_charter = st.checkbox("Charter Schools", key="filter_charter_schools")
 
     st.write("Emergency Services")
-    show_police = st.checkbox("Police Stations", value=True)
-    show_fire = st.checkbox("Fire Stations", value=True)
+    show_police = st.checkbox("Police Stations", key="filter_police")
+    show_fire = st.checkbox("Fire Stations", key="filter_fire")
 
     st.write("Healthcare")
-    show_hospitals = st.checkbox("Hospitals", value=True)
-    show_mental = st.checkbox("Mental Health Centers", value=True)
-    show_clinics = st.checkbox("Free-Standing Clinics", value=True)
+    show_hospitals = st.checkbox("Hospitals", key="filter_hospitals")
+    show_mental = st.checkbox("Mental Health Centers", key="filter_mental_health")
+    show_clinics = st.checkbox("Free-Standing Clinics", key="filter_clinics")
 
     st.write("Infrastructure")
-    show_bus_stops = st.checkbox("Bus Stops", value=True)
-    show_libraries = st.checkbox("Libraries", value=True)
-    show_parks = st.checkbox("Parks", value=True)
+    show_bus_stops = st.checkbox("Bus Stops", key="filter_bus_stops")
+    show_libraries = st.checkbox("Libraries", key="filter_libraries")
+    show_parks = st.checkbox("Parks", key="filter_parks")
 
     st.write("Geographic Data")
-    show_flood = st.checkbox("Flood Zones", value=True)
-    show_evac = st.checkbox("Evacuation Routes", value=True)
-    show_bus_routes = st.checkbox("Bus Routes", value=True)
+    show_flood = st.checkbox("Flood Zones", key="filter_flood_zones")
+    show_evac = st.checkbox("Evacuation Routes", key="filter_evacuation_routes")
+    show_bus_routes = st.checkbox("Bus Routes", key="filter_bus_routes")
 
     radius = st.slider(
         "Search radius (miles)",
         MIN_SEARCH_RADIUS_MILES,
         MAX_SEARCH_RADIUS_MILES,
-        DEFAULT_SEARCH_RADIUS_MILES,
+        key="filter_radius",
     )
 
     return FilterState(

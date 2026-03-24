@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.constants import MIAMI_DEFAULT_LAT, MIAMI_DEFAULT_LON, MIAMI_DEFAULT_ZOOM
+from src.constants import DEFAULT_SEARCH_RADIUS_MILES, MIAMI_DEFAULT_LAT, MIAMI_DEFAULT_LON, MIAMI_DEFAULT_ZOOM
 
 _DEFAULTS: dict = {
     "current_page": "Dashboard",
     "location_input": "",
+    "last_location": "",
     "map_center": [MIAMI_DEFAULT_LAT, MIAMI_DEFAULT_LON],
     "zoom_level": MIAMI_DEFAULT_ZOOM,
     "markers": [],
@@ -21,6 +22,22 @@ _DEFAULTS: dict = {
     # Shared across tabs: set by map_explorer when a location is successfully resolved
     "resolved_coords": None,   # tuple[float, float] | None
     "fetch_key": None,         # str | None — hash of (location + radius + filter flags)
+    # Shared filter state — persists across Map and AI tabs
+    "filter_public_schools": True,
+    "filter_private_schools": True,
+    "filter_charter_schools": True,
+    "filter_police": True,
+    "filter_fire": True,
+    "filter_hospitals": True,
+    "filter_mental_health": True,
+    "filter_clinics": True,
+    "filter_bus_stops": True,
+    "filter_libraries": True,
+    "filter_parks": True,
+    "filter_flood_zones": True,
+    "filter_evacuation_routes": True,
+    "filter_bus_routes": True,
+    "filter_radius": DEFAULT_SEARCH_RADIUS_MILES,
 }
 
 

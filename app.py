@@ -49,7 +49,7 @@ elif st.session_state.current_page == "Map":
     import map_explorer
     map_explorer.main()
 elif st.session_state.current_page == "Bot":
-    import ai_assistant
+    from src.ui import ai_assistant
     ai_assistant.main()
 
 st.markdown("---")
