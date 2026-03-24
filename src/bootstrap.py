@@ -41,6 +41,10 @@ _DEFAULTS: dict = {
     # Dashboard tab fetch deduplication
     "dash_fetch_key": "",
     "dash_data": None,
+    # Set to True by map_explorer after first successful location resolve+fetch
+    "location_submitted": False,
+    # AI tab context deduplication key — format: "{location}|{radius}"
+    "ai_context_key": None,
 }
 
 

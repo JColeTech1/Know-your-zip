@@ -43,7 +43,6 @@ from src.constants import (
 )
 from src.ui.filters import FilterState, render_filter_sidebar
 from src.utils.distance import is_within_radius
-from src.utils.geocoder import geocode_address
 from src.zip_validator import ZIPValidator
 
 logger = logging.getLogger(__name__)
@@ -105,9 +104,9 @@ def _filters_hash(filters: FilterState) -> str:
     return "|".join(str(int(f)) for f in flags)
 
 
-def _get_or_fetch(location_input: str, coords: LatLon, filters: FilterState) -> NearbyData:
+def _get_or_fetch(location_label: str, coords: LatLon, filters: FilterState) -> NearbyData:
     """Return cached NearbyData if key is unchanged, otherwise fetch fresh."""
-    new_key = f"{location_input}|{filters.radius}|{_filters_hash(filters)}"
+    new_key = f"{location_label}|{filters.radius}|{_filters_hash(filters)}"
     if (
         st.session_state.get("dash_fetch_key") == new_key
         and st.session_state.get("dash_data") is not None
@@ -119,45 +118,6 @@ def _get_or_fetch(location_input: str, coords: LatLon, filters: FilterState) -> 
     st.session_state["dash_data"] = data
     st.session_state["dash_fetch_key"] = new_key
     return data
-
-
-# ---------------------------------------------------------------------------
-# Coordinate resolution
-# ---------------------------------------------------------------------------
-
-
-def _render_valid_zips(zv: ZIPValidator) -> None:
-    """Show valid Miami-Dade ZIP codes in an expander."""
-    with st.expander("Show valid Miami-Dade County ZIP codes"):
-        valid_zips = sorted(zv.get_all_zip_codes())
-        cols = st.columns(5)
-        for i, z in enumerate(valid_zips):
-            cols[i % 5].write(z)
-
-
-def _resolve_coords(location_input: str) -> LatLon | None:
-    """Return (lat, lon) for a ZIP code or address string, or None on failure."""
-    zv = _get_zip_validator()
-    if location_input.isdigit() and len(location_input) == 5:
-        is_valid, message, _ = zv.validate_zip(location_input)
-        if not is_valid:
-            st.error(message)
-            _render_valid_zips(zv)
-            return None
-        return zv.get_zip_coordinates(location_input)
-    coords = geocode_address(location_input)
-    if coords is None:
-        st.error("Could not find the specified address.")
-    return coords
-
-
-def _get_coords_for_input(location_input: str) -> LatLon | None:
-    """Prefer session_state resolved_coords when input matches stored location."""
-    stored_coords: LatLon | None = st.session_state.get("resolved_coords")
-    stored_input: str = st.session_state.get("location_input", "")
-    if stored_coords and location_input and location_input == stored_input:
-        return stored_coords
-    return _resolve_coords(location_input)
 
 
 # ---------------------------------------------------------------------------
@@ -408,25 +368,25 @@ def main() -> None:
     st.header("📊 Miami-Dade County Overview")
     _render_overview_charts()
 
+    if not st.session_state.get("location_submitted"):
+        st.info("Enter a location on the **Map Explorer** tab first.")
+        return
+
+    coords: LatLon = st.session_state["resolved_coords"]
+    location_label: str = st.session_state.get("last_location", "")
+
     control_col, main_col = st.columns([1, 3])
 
     with control_col:
         st.subheader("Control Panel")
-        if st.session_state.get("resolved_coords") and st.session_state.get("location_input"):
-            st.info(f"Map location in use: **{st.session_state.location_input}**")
-        location_input: str = st.text_input("Enter address or ZIP code", key="location_input")
+        st.caption(f"Showing data for: **{location_label}**")
         filters: FilterState = render_filter_sidebar()
 
     with main_col:
-        if not location_input:
-            return
-        coords = _get_coords_for_input(location_input)
-        if coords is None:
-            return
         st.header("🎯 Local Area Insights")
-        st.success(f"Showing results for: {location_input}")
+        st.success(f"Showing results for: {location_label}")
         try:
-            data = _get_or_fetch(location_input, coords, filters)
+            data = _get_or_fetch(location_label, coords, filters)
             _render_tabs(data, filters.radius)
         except Exception as exc:
             logger.error("Dashboard analysis failed: %s", exc)

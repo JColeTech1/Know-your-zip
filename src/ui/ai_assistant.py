@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 
 import streamlit as st
 from together import Together
@@ -26,15 +25,12 @@ from src.constants import (
     AI_MAX_TOKENS,
     AI_MODEL,
     AI_TEMPERATURE,
-    ZIP_CODE_PATTERN,
 )
 from src.ui.data_fetcher import build_markers
 from src.ui.filters import FilterState, render_filter_sidebar
-from src.utils.geocoder import geocode_address
 from src.zip_validator import ZIPValidator
 
 logger = logging.getLogger(__name__)
-_ZIP_RE = re.compile(ZIP_CODE_PATTERN)
 
 LatLon = tuple[float, float]
 
@@ -71,30 +67,6 @@ def get_together_client() -> Together:
             "TOGETHER_API_KEY not set in .env or Streamlit secrets."
         )
     return Together(api_key=api_key)
-
-
-# ---------------------------------------------------------------------------
-# Location resolution
-# ---------------------------------------------------------------------------
-
-def _resolve_location(
-    location_input: str,
-    zip_validator: ZIPValidator,
-) -> LatLon | None:
-    """Return (lat, lon) for a ZIP or free-text address, or None on failure."""
-    if _ZIP_RE.match(location_input.strip()):
-        is_valid, message, _ = zip_validator.validate_zip(location_input)
-        if not is_valid:
-            st.error(message)
-            return None
-        coords = zip_validator.get_zip_coordinates(location_input)
-        if not coords:
-            st.error("Could not get coordinates for this ZIP code.")
-        return coords
-    coords = geocode_address(location_input)
-    if not coords:
-        st.error("Could not find coordinates for the provided location.")
-    return coords
 
 
 # ---------------------------------------------------------------------------
@@ -165,72 +137,32 @@ def _get_ai_response(
 
 
 # ---------------------------------------------------------------------------
-# Location submit handler
+# Context auto-build
 # ---------------------------------------------------------------------------
 
-def _handle_location_submit(
-    location_input: str,
-    filters: FilterState,
+def _ensure_location_context(
     apis: dict,
     zip_validator: ZIPValidator,
+    filters: FilterState,
 ) -> None:
-    """Resolve location, build context, update session state, rerun."""
-    cached = (
-        st.session_state.get("resolved_coords") is not None
-        and st.session_state.get("last_location") == location_input
-    )
-    if cached:
-        coords: LatLon = st.session_state.resolved_coords
-    else:
-        with st.spinner("Resolving location…"):
-            result = _resolve_location(location_input, zip_validator)
-        if not result:
-            return
-        coords = result
-        st.session_state.resolved_coords = coords
-        st.session_state.last_location = location_input
-
-    with st.spinner("Fetching nearby data…"):
+    """Build location_data from session state if not already built for current location."""
+    coords: LatLon | None = st.session_state.get("resolved_coords")
+    location: str = st.session_state.get("last_location", "")
+    if not coords or not location:
+        return
+    context_key = f"{location}|{filters.radius}"
+    if st.session_state.get("ai_context_key") == context_key:
+        return
+    with st.spinner("Building location context…"):
         markers = build_markers(apis, zip_validator, coords, filters)
-
-    context = _build_context_summary(location_input, filters.radius, markers)
+    context = _build_context_summary(location, filters.radius, markers)
     st.session_state.location_data = context
-    st.rerun()
+    st.session_state.ai_context_key = context_key
 
 
 # ---------------------------------------------------------------------------
 # Panel renderers
 # ---------------------------------------------------------------------------
-
-def _render_location_panel(
-    apis: dict,
-    zip_validator: ZIPValidator,
-) -> None:
-    """Render left column: location input + filter sidebar."""
-    st.subheader("📍 Location Information")
-
-    coords = st.session_state.get("resolved_coords")
-    last: str = st.session_state.get("last_location", "")
-    if coords and last:
-        st.success(f"Currently showing: **{last}**")
-
-    with st.form(key="ai_location_form", clear_on_submit=False):
-        in_col, btn_col = st.columns([4, 1])
-        with in_col:
-            location_input = st.text_input(
-                "Enter your address or ZIP code",
-                key="location_input",
-            )
-        with btn_col:
-            submitted = st.form_submit_button("Enter Location")
-        filters = render_filter_sidebar()
-
-    if submitted:
-        if not location_input:
-            st.error("Please enter an address or ZIP code.")
-        else:
-            _handle_location_submit(location_input, filters, apis, zip_validator)
-
 
 def _render_chat_panel(client: Together) -> None:
     """Render right column: chat history + message input."""
@@ -287,14 +219,23 @@ def main() -> None:
         st.error(str(exc))
         st.stop()
 
-    apis = get_apis()
-    zip_validator = get_zip_validator()
+    # Location banner — read-only; location is set on the Map Explorer tab
+    if not st.session_state.get("location_submitted"):
+        st.info("Enter a location on the **Map Explorer** tab to enable location-aware answers.")
+    else:
+        location_label: str = st.session_state.get("last_location", "")
+        st.caption(f"📍 Location context: **{location_label}**")
 
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        _render_location_panel(apis, zip_validator)
-    with col2:
-        _render_chat_panel(client)
+    # Filter sidebar drives context granularity
+    filters: FilterState = render_filter_sidebar()
+
+    # Auto-build location context whenever location or radius changes
+    if st.session_state.get("location_submitted"):
+        apis = get_apis()
+        zip_validator = get_zip_validator()
+        _ensure_location_context(apis, zip_validator, filters)
+
+    _render_chat_panel(client)
 
     if st.button("Clear Chat"):
         st.session_state.messages = []
