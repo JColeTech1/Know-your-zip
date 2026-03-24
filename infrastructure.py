@@ -23,9 +23,9 @@ class APIInfrastructure:
             api_key (Optional[str]): API key for authentication
         """
         self.base_url = base_url
-        self.api_key = api_key or os.getenv('API_KEY')
+        self.api_key = api_key  # Never auto-read from env; callers must pass explicitly
         self.session = requests.Session()
-        
+
         if self.api_key:
             self.session.headers.update({
                 'Authorization': f'Bearer {self.api_key}',
@@ -120,11 +120,11 @@ class LibrariesAPI(APIInfrastructure):
 
 class ParksAPI(APIInfrastructure):
     """Class for handling Miami-Dade parks API operations."""
-    
+
     def __init__(self):
         """Initialize the parks API with the specific base URL."""
         super().__init__(
-            base_url="https://gisweb.miamidade.gov/arcgis/rest/services/Parks/MD_Parks305/MapServer/0"
+            base_url="https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/arcgis/rest/services/Parks/FeatureServer/0"
         )
     
     def get_all_parks(self) -> Dict[str, Any]:

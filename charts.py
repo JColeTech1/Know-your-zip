@@ -66,8 +66,9 @@ def plot_schools_histogram():
         nbins=6,
         title='School Distribution',
         labels={'Total_Schools': 'Number of Schools', 'count': 'Number of ZIPs'},
-        category_orders={'Total_Schools': sorted(df['Total_Schools'].unique())},  # Sort bins by value
-        text_auto=True  # Enable automatic text display
+        category_orders={'Total_Schools': sorted(df['Total_Schools'].unique())},
+        text_auto=True,
+        color_discrete_sequence=['#0E7C86']
     )
     
     # Update layout for better appearance
@@ -115,9 +116,9 @@ def plot_schools_by_type():
             'variable': 'School Type'
         },
         color_discrete_map={
-            'Public_Schools': '#1f77b4',
-            'Private_Schools': '#ff7f0e',
-            'Charter_Schools': '#2ca02c'
+            'Public_Schools': '#0E7C86',
+            'Private_Schools': '#FF6B4A',
+            'Charter_Schools': '#4BBFD4'
         }
     )
     
@@ -187,11 +188,11 @@ def plot_fire_station_proximity_pie():
     # Sort DataFrame by ZIP code count to assign colors based on segment size
     df = df.sort_values('ZIP Codes', ascending=False)  # Changed to descending order
     
-    # Create custom color sequence from light red (larger values) to darker red (smaller values)
-    colors = ['#FFD9D9',    # Light red for largest (slightly darker than before)
-             '#FFB3B3',     # Medium-light red
-             '#FF8080',     # Medium red
-             '#FF4D4D']     # Darker red for smallest
+    # Miami coral palette: lightest for largest segments, darkest for smallest
+    colors = ['#FFDDD5',    # Lightest coral
+              '#FFB39A',    # Light coral
+              '#FF8C69',    # Medium coral
+              '#FF6B4A']    # Deep coral
     
     # Create pie chart
     fig = px.pie(
@@ -243,10 +244,13 @@ def plot_zip_park_density_treemap():
     
     # Get all ZIP codes and their areas
     zip_codes = zip_validator.get_all_zip_codes()
-    
-    # Get all parks
-    parks_data = parks_api.get_all_parks()
-    
+
+    # Get all parks — fall back to empty data if the API is unavailable
+    try:
+        parks_data = parks_api.get_all_parks()
+    except Exception:
+        parks_data = {'features': []}
+
     # Initialize data structure
     zip_data = {
         'ZIP_Code': [],
@@ -387,9 +391,9 @@ def plot_schools_by_grade():
             'School_Type': 'School Type'
         },
         color_discrete_map={
-            'Public': '#1f77b4',
-            'Private': '#ff7f0e',
-            'Charter': '#2ca02c'
+            'Public': '#0E7C86',
+            'Private': '#FF6B4A',
+            'Charter': '#4BBFD4'
         }
     )
     
@@ -447,7 +451,7 @@ def plot_proximity_chart(facility_counts: dict, radius: float):
         title=f'Number of Facilities Within {radius} Miles',
         labels={'x': 'Facility Type', 'y': 'Count'},
         color=list(facility_counts.keys()),
-        color_discrete_sequence=px.colors.qualitative.Set3
+        color_discrete_sequence=['#0E7C86', '#4BBFD4', '#FF6B4A', '#FFB39A']
     )
     
     # Update layout for better appearance
@@ -504,7 +508,7 @@ def plot_coverage_chart(coverage_data: pd.DataFrame):
         y='Coverage Score',
         title='Service Coverage Analysis (0-10 scale)',
         color='Category',
-        color_discrete_sequence=px.colors.qualitative.Set1
+        color_discrete_sequence=['#0E7C86', '#4BBFD4', '#FF6B4A', '#FFB39A']
     )
     
     # Update layout for better appearance
@@ -566,7 +570,7 @@ def plot_risk_chart(risk_data: pd.DataFrame):
         y='Risk Score',
         title='Risk Assessment (Higher Score = Higher Risk)',
         color='Risk Factor',
-        color_discrete_sequence=px.colors.sequential.Reds
+        color_discrete_sequence=['#FF6B4A', '#FF8C69', '#FFB39A', '#FFDDD5']
     )
     
     # Update layout for better appearance

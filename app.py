@@ -22,13 +22,13 @@ st.markdown("""
     }
 
     [data-theme="dark"] .stButton > button {
-        color: #2A3A40;
-        background-color: #f0f2f6;
+        color: #1C2B30;
+        background-color: #F5F0E8;
     }
 
     [data-theme="dark"] .stButton > button:hover {
         color: white;
-        background-color: #4CAF50;
+        background-color: #0E7C86;
     }
 
     [data-theme="dark"] div[data-testid="stVerticalBlock"] > div:has(div.stButton) {
@@ -123,23 +123,29 @@ st.markdown("""
     /* Responsive button styling */
     .stButton > button {
         width: 100%;
-        border-radius: 5px;
+        border-radius: 8px;
         height: 3em;
-        background-color: #f0f2f6;
+        background-color: #F5F0E8;
         margin: 0.2rem 0;
         padding: 0.5rem;
         white-space: normal;
         word-wrap: break-word;
+        border: 1px solid #D9D0C4;
+        font-weight: 500;
+        color: #1C2B30;
+        transition: background-color 0.15s ease, color 0.15s ease;
     }
-    
+
     .stButton > button:hover {
-        background-color: #4CAF50;
+        background-color: #0E7C86;
         color: white;
+        border-color: #0E7C86;
     }
-    
+
     .stButton > button[data-selected="true"] {
-        background-color: #4CAF50;
+        background-color: #0E7C86;
         color: white;
+        border-color: #0E7C86;
     }
 
     /* Responsive container for buttons */
@@ -168,7 +174,7 @@ st.markdown("""
         font-weight: bold;
         line-height: 1.2;
         text-align: center;
-        color: #2A3A40;
+        color: #0E7C86;
     }
 
     .title-text-line {
@@ -177,7 +183,7 @@ st.markdown("""
 
     /* Light mode specific colors */
     [data-theme="light"] .title-text {
-        color: #2A3A40;
+        color: #0E7C86;
     }
 
     /* Responsive logo container */
@@ -237,6 +243,10 @@ st.markdown("""
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'Dashboard'
 
+# Shared location state — persists across tab switches
+if 'location_input' not in st.session_state:
+    st.session_state.location_input = ''
+
 # Initialize map-related session state variables
 if 'map_center' not in st.session_state:
     st.session_state.map_center = [25.7617, -80.1918]  # Miami-Dade County center coordinates
@@ -295,28 +305,20 @@ if st.session_state.current_page == 'Dashboard':
     dashboard.main()
     
 elif st.session_state.current_page == 'Map':
-    # Modify map imports to avoid page_config
-    import map4
-    # Remove page config from map4.py execution
-    if hasattr(map4, 'main'):
-        map4.main()
+    import map_explorer
+    if hasattr(map_explorer, 'main'):
+        map_explorer.main()
     else:
-        # Run map code without page config
-        from map4 import get_apis as get_map_apis
-        apis = get_map_apis()
-        # Rest of map functionality
-        
+        from map_explorer import get_apis as get_map_apis
+        get_map_apis()
+
 elif st.session_state.current_page == 'Bot':
-    # Modify bot imports to avoid page_config
-    import bot4
-    # Remove page config from bot4.py execution
-    if hasattr(bot4, 'main'):
-        bot4.main()
+    import ai_assistant
+    if hasattr(ai_assistant, 'main'):
+        ai_assistant.main()
     else:
-        # Run bot code without page config
-        from bot4 import get_apis as get_bot_apis
-        apis = get_bot_apis()
-        # Rest of bot functionality
+        from ai_assistant import get_apis as get_bot_apis
+        get_bot_apis()
 
 # Footer
 st.markdown("---")

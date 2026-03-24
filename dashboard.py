@@ -110,8 +110,8 @@ def main():
     with control_col:
         st.subheader("Control Panel")
         
-        # Location input
-        location_input = st.text_input("Enter address or ZIP code")
+        # Location input — key ties this to session state so value persists across tab switches
+        location_input = st.text_input("Enter address or ZIP code", key="location_input")
         
         # Search radius
         radius = st.slider("Search radius (miles)", 1.0, 20.0, 5.0)
@@ -286,7 +286,10 @@ def main():
                                             nearby_data['infrastructure'].append(library)
                             
                             if show_parks:
-                                parks = apis['Infrastructure']['Parks'].get_all_parks()
+                                try:
+                                    parks = apis['Infrastructure']['Parks'].get_all_parks()
+                                except Exception:
+                                    parks = {'features': []}
                                 for park in parks.get('features', []):
                                     if 'geometry' in park and park['geometry']:
                                         coords = park['geometry']['coordinates']
