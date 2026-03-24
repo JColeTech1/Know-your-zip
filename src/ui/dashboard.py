@@ -55,6 +55,15 @@ LatLon = tuple[float, float]
 NearbyData = dict[str, Any]
 
 
+def _is_valid_coords(value: Any) -> bool:
+    """Return True if *value* is a (lat, lon) 2-tuple of real numbers."""
+    return (
+        isinstance(value, (tuple, list))
+        and len(value) == 2
+        and all(isinstance(v, (int, float)) for v in value)
+    )
+
+
 # ---------------------------------------------------------------------------
 # API singletons (cached for the lifetime of the Streamlit process)
 # ---------------------------------------------------------------------------
@@ -382,12 +391,18 @@ def main() -> None:
         if not st.session_state.get("location_submitted"):
             st.info("Enter a location in the panel on the left to see local area insights.")
             return
-        coords: LatLon = st.session_state["resolved_coords"]
+        raw_coords = st.session_state.get("resolved_coords")
+        if not _is_valid_coords(raw_coords):
+            st.session_state.resolved_coords = None
+            st.session_state.location_submitted = False
+            st.warning("Location data was invalid or outdated — please re-enter your location.")
+            return
+        coords: LatLon = raw_coords  # type: ignore[assignment]
         st.header("🎯 Local Area Insights")
         st.success(f"Showing results for: {location_label}")
         try:
             data = _get_or_fetch(location_label, coords, filters)
             _render_tabs(data, filters.radius)
         except Exception as exc:
-            logger.error("Dashboard analysis failed: %s", exc)
+            logger.error("Dashboard analysis failed: %s", exc, exc_info=True)
             st.error(f"Error processing location: {exc}")

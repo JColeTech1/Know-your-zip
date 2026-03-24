@@ -146,10 +146,14 @@ def _ensure_location_context(
     filters: FilterState,
 ) -> None:
     """Build location_data from session state if not already built for current location."""
-    coords: LatLon | None = st.session_state.get("resolved_coords")
+    raw = st.session_state.get("resolved_coords")
     location: str = st.session_state.get("last_location", "")
-    if not coords or not location:
+    if not location or not isinstance(raw, (tuple, list)) or len(raw) != 2:
+        if raw is not None and not (isinstance(raw, (tuple, list)) and len(raw) == 2):
+            st.session_state.resolved_coords = None
+            st.session_state.location_submitted = False
         return
+    coords: LatLon = raw  # type: ignore[assignment]
     context_key = f"{location}|{filters.radius}"
     if st.session_state.get("ai_context_key") == context_key:
         return
