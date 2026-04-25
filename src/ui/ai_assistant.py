@@ -1,11 +1,11 @@
 """
-AI Assistant tab — chat interface powered by Llama 3.3 via Together.ai.
+AI Assistant tab — chat interface powered by Claude Haiku via Anthropic API.
 
 Responsibilities:
   1. Resolve user location → share resolved_coords / last_location with other tabs
   2. Build location context from nearby data via src/ui/data_fetcher.py
   3. Maintain chat history in session state
-  4. Call Together.ai chat completions API
+  4. Call Anthropic Messages API
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import logging
 import os
 
 import streamlit as st
-from together import Together
+from anthropic import Anthropic
 
 from src.api.education import EducationAPI
 from src.api.emergency import EmergencyServicesAPI
@@ -60,13 +60,13 @@ def get_zip_validator() -> ZIPValidator:
 
 
 @st.cache_resource
-def get_together_client() -> Together:
-    api_key = os.getenv("TOGETHER_API_KEY") or st.secrets.get("TOGETHER_API_KEY", "")
+def get_ai_client() -> Anthropic:
+    api_key = os.getenv("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError(
-            "TOGETHER_API_KEY not set in .env or Streamlit secrets."
+            "ANTHROPIC_API_KEY not set in .env or Streamlit secrets."
         )
-    return Together(api_key=api_key)
+    return Anthropic(api_key=api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -118,22 +118,19 @@ def _build_system_prompt(context: str) -> str:
 
 
 def _get_ai_response(
-    client: Together,
+    client: Anthropic,
     messages: list[dict[str, str]],
     system_prompt: str,
 ) -> str:
-    """Call Together chat completions and return the assistant reply."""
-    api_messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_prompt},
-        *messages,
-    ]
-    response = client.chat.completions.create(
+    """Call Anthropic Messages API and return the assistant reply."""
+    response = client.messages.create(
         model=AI_MODEL,
-        messages=api_messages,
         max_tokens=AI_MAX_TOKENS,
         temperature=AI_TEMPERATURE,
+        system=system_prompt,
+        messages=messages,
     )
-    return response.choices[0].message.content.strip()
+    return response.content[0].text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +165,7 @@ def _ensure_location_context(
 # Panel renderers
 # ---------------------------------------------------------------------------
 
-def _render_chat_panel(client: Together) -> None:
+def _render_chat_panel(client: Anthropic) -> None:
     """Render right column: chat history + message input."""
     st.subheader("💬 Chat with AI Assistant")
 
@@ -184,7 +181,7 @@ def _render_chat_panel(client: Together) -> None:
         _handle_chat_send(client, user_input.strip())
 
 
-def _handle_chat_send(client: Together, user_input: str) -> None:
+def _handle_chat_send(client: Anthropic, user_input: str) -> None:
     """Append user message, get AI reply, update session state."""
     st.session_state.messages.append({"role": "user", "content": user_input})
     raw_context = st.session_state.get("location_data")
@@ -197,7 +194,7 @@ def _handle_chat_send(client: Together, user_input: str) -> None:
     try:
         reply = _get_ai_response(client, st.session_state.messages, system_prompt)
     except Exception as exc:
-        logger.exception("Together API error: %s", exc)
+        logger.exception("Anthropic API error: %s", exc)
         st.error(f"AI error: {exc}")
         st.session_state.messages.pop()  # remove the unsent user message
         return
@@ -218,7 +215,7 @@ def main() -> None:
     )
 
     try:
-        client = get_together_client()
+        client = get_ai_client()
     except RuntimeError as exc:
         st.error(str(exc))
         st.stop()
